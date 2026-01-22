@@ -1,0 +1,73 @@
+services:
+  redis:
+    image: redis:latest
+    container_name: redis-benchmark
+    ports:
+      - "6379:6379"
+    volumes:
+      - ./redis.conf:/usr/local/etc/redis/redis.conf:ro
+    command: ["redis-server", "/usr/local/etc/redis/redis.conf"]
+
+  redis-exporter:
+    image: oliver006/redis_exporter:latest
+    container_name: redis-exporter
+    environment:
+      - REDIS_ADDR=redis://redis:6379
+    ports:
+      - "9121:9121"
+    depends_on:
+      - redis
+
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: prometheus-benchmark
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    depends_on:
+      - redis-exporter
+
+  grafana:
+    image: grafana/grafana:latest
+    container_name: grafana
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_USERS_ALLOW_SIGN_UP=false
+    volumes:
+      - ./grafana/provisioning:/etc/grafana/provisioning
+      - ./grafana/dashboards:/var/lib/grafana/dashboards
+    depends_on:
+      - prometheus
+
+  app-1:
+    build:
+      context: ./server
+    container_name: ratelimit-app-1
+    environment:
+      - SPRING_DATA_REDIS_HOST=redis
+    depends_on:
+      - redis
+
+  app-2:
+    build:
+      context: ./server
+    container_name: ratelimit-app-2
+    environment:
+      - SPRING_DATA_REDIS_HOST=redis
+    depends_on:
+      - redis
+
+  grpc-lb:
+    image: envoyproxy/envoy:v1.30-latest
+    container_name: grpc-lb
+    ports:
+      - "9091:9091"
+    volumes:
+      - ./envoy.yaml:/etc/envoy/envoy.yaml:ro
+    depends_on:
+      - app-1
+      - app-2

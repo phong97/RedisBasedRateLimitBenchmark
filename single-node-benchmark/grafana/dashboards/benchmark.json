@@ -1,0 +1,275 @@
+{
+  "uid": "ratelimit-benchmark",
+  "title": "Redis Rate Limit Benchmark",
+  "tags": [
+    "benchmark",
+    "redis",
+    "grpc",
+    "envoy"
+  ],
+  "timezone": "browser",
+  "schemaVersion": 38,
+  "version": 1,
+  "refresh": "5s",
+  "templating": {
+    "list": [
+      {
+        "name": "key",
+        "type": "query",
+        "datasource": "Prometheus",
+        "refresh": 1,
+        "query": "label_values(ratelimit_requests_by_key_total, key)",
+        "includeAll": true,
+        "multi": true,
+        "allValue": ".*"
+      }
+    ]
+  },
+  "panels": [
+    {
+      "type": "timeseries",
+      "title": "App Requests Total (RPS)",
+      "datasource": "Prometheus",
+      "targets": [
+        {
+          "expr": "sum(irate(ratelimit_requests_total[1m]))",
+          "legendFormat": "total"
+        }
+      ],
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 0
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "App Requests by Key (RPS)",
+      "datasource": "Prometheus",
+      "targets": [
+        {
+          "expr": "sum by (key) (irate(ratelimit_requests_by_key_total{key=~\"$key\"}[1m]))",
+          "legendFormat": "{{key}}"
+        }
+      ],
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 0
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Envoy Downstream RPS",
+      "datasource": "Prometheus",
+      "targets": [
+        {
+          "expr": "sum(irate(envoy_http_grpc_downstream_rq_total[1m]))",
+          "legendFormat": "downstream"
+        }
+      ],
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 8
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Envoy Upstream RPS",
+      "datasource": "Prometheus",
+      "targets": [
+        {
+          "expr": "sum(irate(envoy_cluster_grpc_backend_upstream_rq_total[1m]))",
+          "legendFormat": "upstream"
+        }
+      ],
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 8
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Redis Ops/sec",
+      "datasource": "Prometheus",
+      "targets": [
+        {
+          "expr": "irate(redis_commands_processed_total[1m])",
+          "legendFormat": "ops"
+        }
+      ],
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 16
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Redis Connected Clients",
+      "datasource": "Prometheus",
+      "targets": [
+        {
+          "expr": "redis_connected_clients",
+          "legendFormat": "clients"
+        }
+      ],
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 16
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "App CPU Usage (%)",
+      "datasource": "Prometheus",
+      "targets": [
+        {
+          "expr": "avg(process_cpu_usage) * 100",
+          "legendFormat": "app"
+        }
+      ],
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 24
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "App JVM Memory Used (MB)",
+      "datasource": "Prometheus",
+      "targets": [
+        {
+          "expr": "sum(jvm_memory_used_bytes) / 1024 / 1024",
+          "legendFormat": "jvm"
+        }
+      ],
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 24
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Redis CPU (cores)",
+      "datasource": "Prometheus",
+      "targets": [
+        {
+          "expr": "rate(redis_cpu_sys_seconds_total[1m]) + rate(redis_cpu_user_seconds_total[1m])",
+          "legendFormat": "redis"
+        }
+      ],
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 32
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Redis Memory Used (MB)",
+      "datasource": "Prometheus",
+      "targets": [
+        {
+          "expr": "redis_memory_used_bytes / 1024 / 1024",
+          "legendFormat": "redis"
+        }
+      ],
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 32
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Envoy Request Latency (ms)",
+      "datasource": "Prometheus",
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.50, sum(rate(envoy_http_grpc_downstream_rq_time_bucket[1m])) by (le))",
+          "legendFormat": "p50"
+        },
+        {
+          "expr": "histogram_quantile(0.95, sum(rate(envoy_http_grpc_downstream_rq_time_bucket[1m])) by (le))",
+          "legendFormat": "p95"
+        },
+        {
+          "expr": "histogram_quantile(0.99, sum(rate(envoy_http_grpc_downstream_rq_time_bucket[1m])) by (le))",
+          "legendFormat": "p99"
+        }
+      ],
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 40
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Envoy Responses by Status Class (RPS)",
+      "datasource": "Prometheus",
+      "targets": [
+        {
+          "expr": "sum(irate(envoy_http_grpc_downstream_rq_1xx[1m]))",
+          "legendFormat": "1xx"
+        },
+        {
+          "expr": "sum(irate(envoy_http_grpc_downstream_rq_2xx[1m]))",
+          "legendFormat": "2xx"
+        },
+        {
+          "expr": "sum(irate(envoy_http_grpc_downstream_rq_3xx[1m]))",
+          "legendFormat": "3xx"
+        },
+        {
+          "expr": "sum(irate(envoy_http_grpc_downstream_rq_4xx[1m]))",
+          "legendFormat": "4xx"
+        },
+        {
+          "expr": "sum(irate(envoy_http_grpc_downstream_rq_5xx[1m]))",
+          "legendFormat": "5xx"
+        }
+      ],
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 40
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Request Avg Latency (ms)",
+      "datasource": "Prometheus",
+      "targets": [
+        {
+          "expr": "sum(rate(envoy_http_grpc_downstream_rq_time_sum[1m])) / sum(rate(envoy_http_grpc_downstream_rq_time_count[1m]))",
+          "legendFormat": "avg"
+        }
+      ],
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 48
+      }
+    }
+  ]
+}

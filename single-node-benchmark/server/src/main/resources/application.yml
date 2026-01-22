@@ -1,0 +1,33 @@
+spring:
+  data:
+    redis:
+      host: localhost
+      port: 6379
+      # High throughput: larger pool to allow more concurrent connections.
+      lettuce:
+        pool:
+          max-active: 512
+          max-idle: 256
+          min-idle: 32
+          max-wait: 5s
+      # Benchmark-safe timeout.
+      timeout: 1s
+
+logging:
+  # Minimal logging for benchmark-focused runs.
+  level:
+    root: WARN
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: prometheus,health
+  endpoint:
+    prometheus:
+      enabled: true
+
+grpc:
+  server:
+    # gRPC server port for benchmarking clients.
+    port: 9090
