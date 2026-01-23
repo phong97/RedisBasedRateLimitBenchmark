@@ -22,10 +22,26 @@ management:
   endpoints:
     web:
       exposure:
-        include: prometheus,health
+        include: prometheus,health,metrics
   endpoint:
     prometheus:
       enabled: true
+    metrics:
+      enabled: true
+  metrics:
+    export:
+      prometheus:
+        enabled: true
+    distribution:
+      percentiles-histogram:
+        http.server.requests: true
+    tags:
+      application: ratelimit-benchmark
+  # Enable detailed JVM metrics
+  prometheus:
+    metrics:
+      export:
+        enabled: true
 
 grpc:
   server:

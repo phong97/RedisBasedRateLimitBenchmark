@@ -1,12 +1,23 @@
 # Redis Rate Limit Benchmark
 
-Minimal Spring Boot 3 + gRPC app for benchmarking Redis-based rate limiting.
+Minimal Spring Boot 3 + gRPC app for benchmarking Redis-based rate limiting **with comprehensive bottleneck detection**.
 
 ## Architecture
 
 - gRPC server (Spring Boot) in [server](server)
 - Java benchmark client (Benchmark) in [client](client)
-- Redis + Prometheus + Grafana + Envoy in [docker-compose.yml](docker-compose.yml)
+- Redis + Prometheus + Grafana + Envoy + **cAdvisor** in [docker-compose.yml](docker-compose.yml)
+
+## 🔥 New: Bottleneck Detection
+
+This benchmark helps you identify **whether Redis or the Java App is the bottleneck**:
+
+- **Container-level metrics** (CPU, memory, network) via cAdvisor
+- **JVM metrics** (GC pressure, heap, thread pool)
+- **Latency breakdown** (Total vs Redis vs App overhead)
+- **Automated stress testing** to find breaking points
+
+📖 **[Read the full Bottleneck Detection Guide →](BOTTLENECK_DETECTION.md)**
 
 ## gRPC API
 
@@ -17,64 +28,187 @@ Minimal Spring Boot 3 + gRPC app for benchmarking Redis-based rate limiting.
 
 Proto: [server/src/main/proto/ratelimit.proto](server/src/main/proto/ratelimit.proto)
 
-## Run infrastructure (Redis + Prometheus + Grafana + Envoy)
+## Quick Start
 
-Use Docker Compose in [docker-compose.yml](docker-compose.yml). Envoy listens on 9091 and balances traffic to two app instances.
-
-## Run the server
-
-The server lives in [server](server). It exposes gRPC on 9090 and Prometheus metrics on 8080.
-
-From [server](server):
-
-```bash
-./gradlew bootRun
-```
-
-### Run the server with Docker
-
-Build and run the two app instances defined in [docker-compose.yml](docker-compose.yml):
-
-```bash
-docker compose up --build app-1 app-2
-```
-
-To run the full stack (Redis, Prometheus, Grafana, Envoy, and both app instances):
+### 1. Run the full stack
 
 ```bash
 docker compose up --build
 ```
 
-## Run Benchmark
+This starts:
+- Redis (port 6379)
+- Redis Exporter (port 9121)
+- Prometheus (port 9090)
+- Grafana (port 3000)
+- cAdvisor (port 8080) ⬅️ NEW
+- 2x App instances (ratelimit-app-1, ratelimit-app-2)
+- Envoy Load Balancer (port 9091)
 
-Benchmark is the Java gRPC benchmark client in [client](client). Use one of these entrypoints for each case:
+### 2. Run stress test
 
-- Single key: [client/src/main/java/com/example/ratelimit/client/SingleKeyBenchmark.java](client/src/main/java/com/example/ratelimit/client/SingleKeyBenchmark.java)
-- 4 keys balanced: [client/src/main/java/com/example/ratelimit/client/FourKeyBalancedBenchmark.java](client/src/main/java/com/example/ratelimit/client/FourKeyBalancedBenchmark.java)
-- 4 keys (1 hot): [client/src/main/java/com/example/ratelimit/client/FourKeyHotBenchmark.java](client/src/main/java/com/example/ratelimit/client/FourKeyHotBenchmark.java)
+```bash
+./stress_test.sh localhost:9091
+```
 
-Each entrypoint targets the Envoy load balancer at localhost:9091 by default.
+This runs 12 scenarios from 1K to 100K RPS to find your breaking point.
+
+### 3. View dashboard
+
+Open Grafana at **http://localhost:3000** (admin/admin)
+
+Dashboard includes:
+- ✅ Overview (RPS, Latency, Errors)
+- 🔥 **Container Resources** (CPU, Memory, Network)
+- ☕ **JVM & GC Pressure**
+- 🔴 Redis Performance & Resources
+- 🌐 Envoy Load Balancer
+- 📈 Quick Stats
+
+## Run Manual Benchmark
 
 From [client](client):
 
 ```bash
-./gradlew run --args="localhost:9091 key 8 10 5"
+# Single key test
+./gradlew run --args="localhost:9091 key 8 30 5" -PmainClass=com.example.ratelimit.client.SingleKeyBenchmark
+
+# 4 keys balanced
+./gradlew run --args="localhost:9091 key 8 30 5" -PmainClass=com.example.ratelimit.client.FourKeyBalancedBenchmark
+
+# 4 keys with 90% hot key
+./gradlew run --args="localhost:9091 key 8 30 5" -PmainClass=com.example.ratelimit.client.FourKeyHotBenchmark
 ```
 
-Replace the main class to run a specific case:
-
-```bash
-./gradlew run --args="localhost:9091 key 8 10 5" -PmainClass=com.example.ratelimit.client.SingleKeyBenchmark
-./gradlew run --args="localhost:9091 key 8 10 5" -PmainClass=com.example.ratelimit.client.FourKeyBalancedBenchmark
-./gradlew run --args="localhost:9091 key 8 10 5" -PmainClass=com.example.ratelimit.client.FourKeyHotBenchmark
-```
-
-Arguments: target, keyPrefix, threads, durationSeconds, warmupSeconds.
+**Arguments:** target, keyPrefix, threads, durationSeconds, warmupSeconds
 
 ## Monitoring
 
-Prometheus is available at http://localhost:9090 and Grafana at http://localhost:3000 (admin/admin).
+| Service | URL | Purpose |
+|---------|-----|---------|
+| Grafana | http://localhost:3000 | Dashboards (admin/admin) |
+| Prometheus | http://localhost:9090 | Metrics database |
+| cAdvisor | http://localhost:8080 | Container metrics |
 
-Prometheus scrapes:
-- App metrics: http://localhost:8080/actuator/prometheus
-- Redis exporter: http://localhost:9121
+**Prometheus scrapes:**
+- App metrics: http://app-1:8080/actuator/prometheus, http://app-2:8080/actuator/prometheus
+- Redis exporter: http://redis-exporter:9121
+- Envoy: http://grpc-lb:9901/stats/prometheus
+- cAdvisor: http://cadvisor:8080/metrics
+
+## 🎯 Finding Bottlenecks
+
+### Is Redis the bottleneck?
+- Redis CPU → 90-100%
+- App CPU → 30-50%
+- Redis latency → High
+
+**Solution:** Scale Redis (cluster mode, faster hardware)
+
+### Is Java App the bottleneck?
+- App CPU → 90-100%
+- GC Pressure → > 10%
+- Large latency gap (Total - Redis > 50ms)
+
+**Solution:** Scale app instances, tune JVM, optimize code
+
+📖 **[See full troubleshooting guide →](BOTTLENECK_DETECTION.md)**
+
+## Development
+
+### Build server
+```bash
+cd server
+./gradlew build
+```
+
+### Build client
+```bash
+cd client
+./gradlew build
+```
+
+### Run locally (without Docker)
+```bash
+# Start Redis
+docker run -p 6379:6379 redis:latest
+
+# Run server
+cd server
+./gradlew bootRun
+
+# Run client (in another terminal)
+cd client
+./gradlew run --args="localhost:9090 key 8 30 5"
+```
+
+## Architecture Diagram
+
+```
+┌─────────────┐
+│   Client    │
+│ (JMH Load)  │
+└──────┬──────┘
+       │
+       v
+┌──────────────────┐
+│  Envoy (LB)      │  ← Load balances gRPC
+│  :9091           │
+└────────┬─────────┘
+         │
+    ┌────┴────┐
+    v         v
+┌─────┐   ┌─────┐
+│App-1│   │App-2│  ← Spring Boot gRPC servers
+│:9090│   │:9090│
+└──┬──┘   └──┬──┘
+   │         │
+   └────┬────┘
+        v
+   ┌─────────┐
+   │  Redis  │  ← Rate limit state
+   │  :6379  │
+   └─────────┘
+        │
+        v (metrics)
+   ┌───────────────┐
+   │  Prometheus   │  ← Scrapes all metrics
+   │  :9090        │
+   └───────┬───────┘
+           v
+      ┌─────────┐
+      │ Grafana │  ← Visualization
+      │ :3000   │
+      └─────────┘
+```
+
+## Files Overview
+
+```
+.
+├── docker-compose.yml          # Full stack orchestration
+├── prometheus.yml              # Prometheus config (with cAdvisor)
+├── envoy.yaml                  # Envoy LB config
+├── stress_test.sh              # Automated stress testing ⬅️ NEW
+├── generate_dashboard.py       # Dashboard generator ⬅️ NEW
+├── BOTTLENECK_DETECTION.md     # Bottleneck guide ⬅️ NEW
+├── server/
+│   └── src/main/java/com/example/ratelimit/
+│       ├── config/
+│       │   ├── RedisConfig.java
+│       │   └── MetricsConfig.java  ⬅️ NEW (custom metrics)
+│       └── grpc/
+│           └── RateLimitGrpcService.java
+└── client/
+    └── src/main/java/com/example/ratelimit/client/
+        ├── BenchmarkClient.java
+        ├── SingleKeyBenchmark.java
+        ├── FourKeyBalancedBenchmark.java
+        └── FourKeyHotBenchmark.java
+```
+
+---
+
+**Happy Benchmarking! 🚀**
+
+For detailed bottleneck analysis, see **[BOTTLENECK_DETECTION.md](BOTTLENECK_DETECTION.md)**

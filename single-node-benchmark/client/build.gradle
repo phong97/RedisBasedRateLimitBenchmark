@@ -1,6 +1,11 @@
 plugins {
     id 'java'
+    id 'application'
     id 'com.google.protobuf' version '0.9.4'
+}
+
+application {
+    mainClass = project.hasProperty('mainClass') ? project.getProperty('mainClass') : 'com.example.ratelimit.client.SingleKeyBenchmark'
 }
 
 group = 'com.example'

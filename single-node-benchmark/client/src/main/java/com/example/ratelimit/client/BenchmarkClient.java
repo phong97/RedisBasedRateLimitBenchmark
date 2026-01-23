@@ -25,7 +25,7 @@ import org.HdrHistogram.Recorder;
 public class BenchmarkClient {
 
     private static final int DEFAULT_THREADS = 8;
-    private static final int DEFAULT_DURATION_SECONDS = 10;
+    private static final int DEFAULT_DURATION_SECONDS = 60;
     private static final int DEFAULT_WARMUP_SECONDS = 5;
     private static final double HOT_KEY_RATIO = 0.90;
 
@@ -131,7 +131,9 @@ public class BenchmarkClient {
 
                             @Override
                             public void onError(Throwable t) {
-                                errors.incrementAndGet();
+                                if (errors.incrementAndGet() < 10) {
+                                    System.err.println("Request failed: " + t.getMessage());
+                                }
                                 failCount.increment();
                                 long latency = System.nanoTime() - requestStart;
                                 totalLatencyNanos.add(latency);

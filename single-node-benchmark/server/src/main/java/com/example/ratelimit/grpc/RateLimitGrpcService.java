@@ -1,12 +1,15 @@
 package com.example.ratelimit.grpc;
 
+import java.time.Duration;
 import java.util.List;
+import java.util.concurrent.TimeUnit;
 
 import org.springframework.data.redis.core.ReactiveStringRedisTemplate;
 import org.springframework.data.redis.core.script.RedisScript;
 
 import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.MeterRegistry;
+import io.micrometer.core.instrument.Timer;
 
 import io.grpc.stub.StreamObserver;
 import net.devh.boot.grpc.server.service.GrpcService;
@@ -17,29 +20,39 @@ public class RateLimitGrpcService extends RateLimitServiceGrpc.RateLimitServiceI
     private final ReactiveStringRedisTemplate redisTemplate;
     private final RedisScript<Long> rateLimitScript;
     private final Counter totalRequests;
-    private final MeterRegistry meterRegistry;
+    private final Counter redisErrors;
+    private final Timer redisTimer;
 
     public RateLimitGrpcService(ReactiveStringRedisTemplate redisTemplate,
                                 RedisScript<Long> rateLimitScript,
                                 MeterRegistry meterRegistry) {
         this.redisTemplate = redisTemplate;
         this.rateLimitScript = rateLimitScript;
-        this.meterRegistry = meterRegistry;
         this.totalRequests = meterRegistry.counter("ratelimit.requests.total");
+        this.redisErrors = meterRegistry.counter("ratelimit.redis.errors");
+        this.redisTimer = Timer.builder("ratelimit.redis.latency")
+                .description("Time taken to execute Redis script")
+                .publishPercentileHistogram()
+                .register(meterRegistry);
     }
 
     @Override
     public void limit(LimitRequest request, StreamObserver<LimitResponse> responseObserver) {
         String key = request.getKey();
         totalRequests.increment();
-        meterRegistry.counter("ratelimit.requests.by_key", "key", key).increment();
-        redisTemplate.execute(rateLimitScript, List.of(key))
+        long start = System.nanoTime();
+        redisTemplate.execute(rateLimitScript, List.of(key), List.of("1"))
                 .single()
+                .timeout(Duration.ofMillis(200))
+                .doOnTerminate(() -> redisTimer.record(System.nanoTime() - start, TimeUnit.NANOSECONDS))
                 .map(count -> LimitResponse.newBuilder().setCount(count).build())
                 .subscribe(response -> {
                     responseObserver.onNext(response);
                     responseObserver.onCompleted();
-                }, responseObserver::onError);
+                }, error -> {
+                    redisErrors.increment();
+                    responseObserver.onError(error);
+                });
     }
 
     @Override

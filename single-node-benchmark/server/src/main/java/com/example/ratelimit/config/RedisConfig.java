@@ -29,7 +29,11 @@ public class RedisConfig {
 
     @Bean
     public RedisScript<Long> rateLimitScript() {
-        String lua = "local current = redis.call('INCR', KEYS[1]); return current;";
+        String lua = "local current = redis.call('INCR', KEYS[1]); " +
+                     "if current == 1 then " +
+                     "   redis.call('EXPIRE', KEYS[1], ARGV[1]); " +
+                     "end; " +
+                     "return current;";
         DefaultRedisScript<Long> script = new DefaultRedisScript<>();
         script.setResultType(Long.class);
         script.setScriptText(lua);
