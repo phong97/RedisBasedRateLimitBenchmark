@@ -1,0 +1,909 @@
+{
+  "uid": "ratelimit-benchmark",
+  "title": "Redis Rate Limit Benchmark (Enhanced)",
+  "tags": [
+    "benchmark",
+    "redis",
+    "grpc",
+    "envoy"
+  ],
+  "timezone": "browser",
+  "schemaVersion": 38,
+  "version": 3,
+  "refresh": "5s",
+  "panels": [
+    {
+      "type": "row",
+      "title": "📊 Overview - Throughput & Latency",
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 0
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Total Throughput (RPS)",
+      "description": "Request rate from both App and Envoy perspectives",
+      "datasource": "Prometheus",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps",
+          "custom": {
+            "lineWidth": 2,
+            "fillOpacity": 10
+          }
+        }
+      },
+      "targets": [
+        {
+          "expr": "sum(irate(ratelimit_requests_total[1m]))",
+          "legendFormat": "App RPS (Success)"
+        },
+        {
+          "expr": "sum(irate(envoy_http_downstream_rq_total[1m]))",
+          "legendFormat": "Envoy RPS (Total)"
+        }
+      ],
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 0,
+        "y": 1
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "End-to-End Latency",
+      "description": "Request latency measured at Envoy (includes network + app + redis)",
+      "datasource": "Prometheus",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ms",
+          "custom": {
+            "lineWidth": 2,
+            "fillOpacity": 10
+          }
+        }
+      },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.50, sum(rate(envoy_http_downstream_rq_time_bucket[1m])) by (le))",
+          "legendFormat": "P50"
+        },
+        {
+          "expr": "histogram_quantile(0.95, sum(rate(envoy_http_downstream_rq_time_bucket[1m])) by (le))",
+          "legendFormat": "P95"
+        },
+        {
+          "expr": "histogram_quantile(0.99, sum(rate(envoy_http_downstream_rq_time_bucket[1m])) by (le))",
+          "legendFormat": "P99"
+        }
+      ],
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 8,
+        "y": 1
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Error Rate (%)",
+      "description": "Percentage of failed requests",
+      "datasource": "Prometheus",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "custom": {
+            "lineWidth": 2,
+            "fillOpacity": 10
+          },
+          "color": {
+            "mode": "palette-classic"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 1
+              },
+              {
+                "color": "red",
+                "value": 5
+              }
+            ]
+          }
+        }
+      },
+      "targets": [
+        {
+          "expr": "sum(irate(ratelimit_redis_errors_total[1m])) / sum(irate(ratelimit_requests_total[1m])) * 100",
+          "legendFormat": "Redis Error %"
+        },
+        {
+          "expr": "sum(irate(envoy_http_downstream_rq_5xx[1m])) / sum(irate(envoy_http_downstream_rq_total[1m])) * 100",
+          "legendFormat": "Envoy 5xx %"
+        }
+      ],
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 16,
+        "y": 1
+      }
+    },
+    {
+      "type": "row",
+      "title": "🔴 Redis Performance",
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 9
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Redis Latency (App Side)",
+      "description": "Time taken to execute Redis Lua script from App perspective",
+      "datasource": "Prometheus",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ms",
+          "custom": {
+            "lineWidth": 2,
+            "fillOpacity": 10
+          }
+        }
+      },
+      "targets": [
+        {
+          "expr": "irate(ratelimit_redis_latency_seconds_sum[1m]) / irate(ratelimit_redis_latency_seconds_count[1m]) * 1000",
+          "legendFormat": "Avg"
+        },
+        {
+          "expr": "histogram_quantile(0.95, sum(rate(ratelimit_redis_latency_seconds_bucket[1m])) by (le)) * 1000",
+          "legendFormat": "P95"
+        },
+        {
+          "expr": "histogram_quantile(0.99, sum(rate(ratelimit_redis_latency_seconds_bucket[1m])) by (le)) * 1000",
+          "legendFormat": "P99"
+        }
+      ],
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 0,
+        "y": 10
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Redis Ops/sec",
+      "description": "Redis commands processed per second",
+      "datasource": "Prometheus",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops",
+          "custom": {
+            "lineWidth": 2,
+            "fillOpacity": 10
+          }
+        }
+      },
+      "targets": [
+        {
+          "expr": "irate(redis_commands_processed_total[1m])",
+          "legendFormat": "Commands/sec"
+        }
+      ],
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 8,
+        "y": 10
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Redis CPU Usage",
+      "description": "Redis CPU cores utilization",
+      "datasource": "Prometheus",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "lineWidth": 2,
+            "fillOpacity": 10
+          }
+        }
+      },
+      "targets": [
+        {
+          "expr": "rate(redis_cpu_sys_seconds_total[1m])",
+          "legendFormat": "System CPU"
+        },
+        {
+          "expr": "rate(redis_cpu_user_seconds_total[1m])",
+          "legendFormat": "User CPU"
+        },
+        {
+          "expr": "rate(redis_cpu_sys_seconds_total[1m]) + rate(redis_cpu_user_seconds_total[1m])",
+          "legendFormat": "Total CPU"
+        }
+      ],
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 16,
+        "y": 10
+      }
+    },
+    {
+      "type": "row",
+      "title": "🔴 Redis Resources",
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 18
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Redis Memory Usage",
+      "description": "Redis memory consumption",
+      "datasource": "Prometheus",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bytes",
+          "custom": {
+            "lineWidth": 2,
+            "fillOpacity": 10
+          }
+        }
+      },
+      "targets": [
+        {
+          "expr": "redis_memory_used_bytes",
+          "legendFormat": "Used Memory"
+        },
+        {
+          "expr": "redis_memory_max_bytes",
+          "legendFormat": "Max Memory"
+        },
+        {
+          "expr": "redis_memory_used_rss_bytes",
+          "legendFormat": "RSS Memory"
+        }
+      ],
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 0,
+        "y": 19
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Redis Connections",
+      "description": "Active Redis client connections",
+      "datasource": "Prometheus",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "lineWidth": 2,
+            "fillOpacity": 10
+          }
+        }
+      },
+      "targets": [
+        {
+          "expr": "redis_connected_clients",
+          "legendFormat": "Connected Clients"
+        },
+        {
+          "expr": "redis_blocked_clients",
+          "legendFormat": "Blocked Clients"
+        }
+      ],
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 8,
+        "y": 19
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Redis Keys & Expires",
+      "description": "Number of keys in Redis database",
+      "datasource": "Prometheus",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "lineWidth": 2,
+            "fillOpacity": 10
+          }
+        }
+      },
+      "targets": [
+        {
+          "expr": "redis_db_keys{db=\"db0\"}",
+          "legendFormat": "Total Keys (db0)"
+        },
+        {
+          "expr": "redis_db_keys_expiring{db=\"db0\"}",
+          "legendFormat": "Expiring Keys (db0)"
+        }
+      ],
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 16,
+        "y": 19
+      }
+    },
+    {
+      "type": "row",
+      "title": "☕ JVM Metrics (App Instances)",
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 27
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "JVM Heap Memory",
+      "description": "JVM heap memory usage for each app instance",
+      "datasource": "Prometheus",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bytes",
+          "custom": {
+            "lineWidth": 2,
+            "fillOpacity": 10
+          }
+        }
+      },
+      "targets": [
+        {
+          "expr": "sum(jvm_memory_used_bytes{area=\"heap\"}) by (instance)",
+          "legendFormat": "Used Heap - {{instance}}"
+        },
+        {
+          "expr": "sum(jvm_memory_max_bytes{area=\"heap\"}) by (instance)",
+          "legendFormat": "Max Heap - {{instance}}"
+        }
+      ],
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 0,
+        "y": 28
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "JVM GC Pause Time",
+      "description": "Garbage collection pause duration",
+      "datasource": "Prometheus",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "custom": {
+            "lineWidth": 2,
+            "fillOpacity": 10
+          }
+        }
+      },
+      "targets": [
+        {
+          "expr": "rate(jvm_gc_pause_seconds_sum[1m])",
+          "legendFormat": "GC Pause Rate (sec/sec)"
+        },
+        {
+          "expr": "increase(jvm_gc_pause_seconds_count[1m])",
+          "legendFormat": "GC Pause Count/min"
+        }
+      ],
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 8,
+        "y": 28
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "JVM Threads",
+      "description": "Number of JVM threads",
+      "datasource": "Prometheus",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "lineWidth": 2,
+            "fillOpacity": 10
+          }
+        }
+      },
+      "targets": [
+        {
+          "expr": "sum(jvm_threads_live_threads) by (instance)",
+          "legendFormat": "Live Threads - {{instance}}"
+        },
+        {
+          "expr": "sum(jvm_threads_daemon_threads) by (instance)",
+          "legendFormat": "Daemon Threads - {{instance}}"
+        }
+      ],
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 16,
+        "y": 28
+      }
+    },
+    {
+      "type": "row",
+      "title": "🌐 Envoy Load Balancer",
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 36
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Envoy Downstream RPS by Status",
+      "description": "Request rate breakdown by HTTP status class",
+      "datasource": "Prometheus",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps",
+          "custom": {
+            "lineWidth": 2,
+            "fillOpacity": 10
+          }
+        }
+      },
+      "targets": [
+        {
+          "expr": "sum(irate(envoy_http_downstream_rq_2xx[1m]))",
+          "legendFormat": "2xx (Success)"
+        },
+        {
+          "expr": "sum(irate(envoy_http_downstream_rq_4xx[1m]))",
+          "legendFormat": "4xx (Client Error)"
+        },
+        {
+          "expr": "sum(irate(envoy_http_downstream_rq_5xx[1m]))",
+          "legendFormat": "5xx (Server Error)"
+        }
+      ],
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 0,
+        "y": 37
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Envoy Upstream Connections",
+      "description": "Connections to backend gRPC servers",
+      "datasource": "Prometheus",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "lineWidth": 2,
+            "fillOpacity": 10
+          }
+        }
+      },
+      "targets": [
+        {
+          "expr": "envoy_cluster_upstream_cx_active{envoy_cluster_name=\"grpc_backend\"}",
+          "legendFormat": "Active Connections"
+        },
+        {
+          "expr": "irate(envoy_cluster_upstream_cx_total{envoy_cluster_name=\"grpc_backend\"}[1m])",
+          "legendFormat": "New Connections/sec"
+        }
+      ],
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 8,
+        "y": 37
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Envoy Request Queue & Pending",
+      "description": "Requests waiting to be processed",
+      "datasource": "Prometheus",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "lineWidth": 2,
+            "fillOpacity": 10
+          }
+        }
+      },
+      "targets": [
+        {
+          "expr": "envoy_cluster_upstream_rq_pending_active{envoy_cluster_name=\"grpc_backend\"}",
+          "legendFormat": "Pending Requests"
+        },
+        {
+          "expr": "envoy_cluster_upstream_rq_active{envoy_cluster_name=\"grpc_backend\"}",
+          "legendFormat": "Active Requests"
+        },
+        {
+          "expr": "irate(envoy_cluster_upstream_rq_timeout{envoy_cluster_name=\"grpc_backend\"}[1m])",
+          "legendFormat": "Timeouts/sec"
+        }
+      ],
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 16,
+        "y": 37
+      }
+    },
+    {
+      "type": "row",
+      "title": "📈 Stat Panels",
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 45
+      }
+    },
+    {
+      "type": "stat",
+      "title": "Current RPS",
+      "datasource": "Prometheus",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 1000
+              },
+              {
+                "color": "green",
+                "value": 5000
+              }
+            ]
+          }
+        }
+      },
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "expr": "sum(irate(ratelimit_requests_total[1m]))",
+          "legendFormat": "RPS"
+        }
+      ],
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 0,
+        "y": 46
+      }
+    },
+    {
+      "type": "stat",
+      "title": "Avg Latency",
+      "datasource": "Prometheus",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ms",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 5
+              },
+              {
+                "color": "red",
+                "value": 20
+              }
+            ]
+          }
+        }
+      },
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.50, sum(rate(envoy_http_downstream_rq_time_bucket[1m])) by (le))",
+          "legendFormat": "P50"
+        }
+      ],
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 4,
+        "y": 46
+      }
+    },
+    {
+      "type": "stat",
+      "title": "P99 Latency",
+      "datasource": "Prometheus",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ms",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 20
+              },
+              {
+                "color": "red",
+                "value": 100
+              }
+            ]
+          }
+        }
+      },
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.99, sum(rate(envoy_http_downstream_rq_time_bucket[1m])) by (le))",
+          "legendFormat": "P99"
+        }
+      ],
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 8,
+        "y": 46
+      }
+    },
+    {
+      "type": "stat",
+      "title": "Error Rate",
+      "datasource": "Prometheus",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 1
+              },
+              {
+                "color": "red",
+                "value": 5
+              }
+            ]
+          }
+        }
+      },
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "expr": "sum(irate(ratelimit_redis_errors_total[1m])) / sum(irate(ratelimit_requests_total[1m])) * 100 or vector(0)",
+          "legendFormat": "Error %"
+        }
+      ],
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 12,
+        "y": 46
+      }
+    },
+    {
+      "type": "stat",
+      "title": "Redis Memory",
+      "datasource": "Prometheus",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bytes",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 536870912
+              },
+              {
+                "color": "red",
+                "value": 1073741824
+              }
+            ]
+          }
+        }
+      },
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "expr": "redis_memory_used_bytes",
+          "legendFormat": "Used"
+        }
+      ],
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 16,
+        "y": 46
+      }
+    },
+    {
+      "type": "stat",
+      "title": "Redis Keys",
+      "datasource": "Prometheus",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 10000
+              },
+              {
+                "color": "red",
+                "value": 100000
+              }
+            ]
+          }
+        }
+      },
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "expr": "sum(redis_db_keys)",
+          "legendFormat": "Keys"
+        }
+      ],
+      "gridPos": {
+        "custom": {
+          "lineWidth": 2,
+          "fillOpacity": 10
+        }
+      }
+    },
+    "targets": [
+      {
+        "expr": "app_thread_active",
+        "legendFormat": "Active Threads - {{instance}}"
+      },
+      {
+        "expr": "app_thread_daemon",
+        "legendFormat": "Daemon Threads - {{instance}}"
+      },
+      {
+        "expr": "jvm_threads_live_threads",
+        "legendFormat": "JVM Live Threads - {{instance}}"
+      }
+    ],
+    "gridPos": {
+      "h": 8,
+      "w": 8,
+      "x": 8,
+      "y": 59
+    }
+  },
+  {
+    "type": "timeseries",
+    "title": "Network I/O (Container)",
+    "description": "Network throughput per container from cAdvisor",
+    "datasource": "Prometheus",
+    "fieldConfig": {
+      "defaults": {
+        "unit": "Bps",
+        "custom": {
+          "lineWidth": 2,
+          "fillOpacity": 10
+        }
+      }
+    },
+    "targets": [
+      {
+        "expr": "rate(container_network_receive_bytes_total{name=~\"ratelimit-app-.*\"}[1m])",
+        "legendFormat": "RX {{name}}"
+      },
+      {
+        "expr": "rate(container_network_transmit_bytes_total{name=~\"ratelimit-app-.*\"}[1m])",
+        "legendFormat": "TX {{name}}"
+      }
+    ],
+    "gridPos": {
+      "h": 8,
+      "w": 8,
+      "x": 16,
+      "y": 59
+    }
+  }
+]
+}

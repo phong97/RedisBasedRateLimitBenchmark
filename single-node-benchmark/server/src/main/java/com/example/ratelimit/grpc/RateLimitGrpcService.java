@@ -43,7 +43,6 @@ public class RateLimitGrpcService extends RateLimitServiceGrpc.RateLimitServiceI
         long start = System.nanoTime();
         redisTemplate.execute(rateLimitScript, List.of(key), List.of("1"))
                 .single()
-                .timeout(Duration.ofMillis(200))
                 .doOnTerminate(() -> redisTimer.record(System.nanoTime() - start, TimeUnit.NANOSECONDS))
                 .map(count -> LimitResponse.newBuilder().setCount(count).build())
                 .subscribe(response -> {

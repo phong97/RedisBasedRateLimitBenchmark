@@ -31,8 +31,8 @@ public class BenchmarkClient {
 
     public enum KeyMode {
         SINGLE,
-        FOUR_BALANCED,
-        FOUR_HOT
+        HUNDRED_KEYS,
+        HUNDRED_KEYS_HOT
     }
 
     public static void run(String[] args, KeyMode mode, int[] targetRpsList) throws InterruptedException {
@@ -53,6 +53,8 @@ public class BenchmarkClient {
         runWarmup(stub, keyPrefix, mode, threads, warmupSeconds, targetRpsList);
         for (int rps : targetRpsList) {
             runBenchmark(stub, keyPrefix, mode, threads, durationSeconds, rps);
+            System.out.println("Cooling down for 5 seconds...");
+            Thread.sleep(5000);
         }
 
         channel.shutdown();
@@ -60,31 +62,31 @@ public class BenchmarkClient {
     }
 
     private static void runWarmup(RateLimitServiceGrpc.RateLimitServiceStub stub,
-                                  String keyPrefix,
-                                  KeyMode mode,
-                                  int threads,
-                                  int warmupSeconds,
-                                  int[] targetRpsList) throws InterruptedException {
+            String keyPrefix,
+            KeyMode mode,
+            int threads,
+            int warmupSeconds,
+            int[] targetRpsList) throws InterruptedException {
         int warmupRps = targetRpsList[0];
         runBenchmarkInternal("warmup", stub, keyPrefix, mode, threads, warmupSeconds, warmupRps);
     }
 
     private static void runBenchmark(RateLimitServiceGrpc.RateLimitServiceStub stub,
-                                     String keyPrefix,
-                                     KeyMode mode,
-                                     int threads,
-                                     int durationSeconds,
-                                     int targetRps) throws InterruptedException {
+            String keyPrefix,
+            KeyMode mode,
+            int threads,
+            int durationSeconds,
+            int targetRps) throws InterruptedException {
         runBenchmarkInternal("benchmark", stub, keyPrefix, mode, threads, durationSeconds, targetRps);
     }
 
     private static void runBenchmarkInternal(String phase,
-                                             RateLimitServiceGrpc.RateLimitServiceStub stub,
-                                             String keyPrefix,
-                                             KeyMode mode,
-                                             int threads,
-                                             int durationSeconds,
-                                             int targetRps) throws InterruptedException {
+            RateLimitServiceGrpc.RateLimitServiceStub stub,
+            String keyPrefix,
+            KeyMode mode,
+            int threads,
+            int durationSeconds,
+            int targetRps) throws InterruptedException {
         long durationNanos = Duration.ofSeconds(durationSeconds).toNanos();
         long endTime = System.nanoTime() + durationNanos;
         int baseRps = targetRps / threads;
@@ -178,6 +180,12 @@ public class BenchmarkClient {
                     "%s mode=%s targetRps=%d total=%d success=%d fail=%d avg=%.3fms p95=%.3fms p99=%.3fms time=%.3fs rps=%.0f%n",
                     phase, mode.name(), targetRps, sent.get(), successCount.sum(), failCount.sum(),
                     avgMillis, p95Millis, p99Millis, seconds, rps);
+
+            if (p99Millis > 100.0) {
+                System.out.printf(
+                        "WARNING: P99 Latency (%.3fms) Exceeded 100ms threshold! Recommended max effective RPS is likely lower than %d.%n",
+                        p99Millis, targetRps);
+            }
         }
     }
 
@@ -187,16 +195,15 @@ public class BenchmarkClient {
     }
 
     private static void resetKeys(RateLimitServiceGrpc.RateLimitServiceBlockingStub blockingStub,
-                                  String keyPrefix,
-                                  KeyMode mode) {
+            String keyPrefix,
+            KeyMode mode) {
         List<String> keys = new ArrayList<>();
         switch (mode) {
             case SINGLE -> keys.add(keyPrefix + 0);
-            case FOUR_BALANCED, FOUR_HOT -> {
-                keys.add(keyPrefix + 0);
-                keys.add(keyPrefix + 1);
-                keys.add(keyPrefix + 2);
-                keys.add(keyPrefix + 3);
+            case HUNDRED_KEYS, HUNDRED_KEYS_HOT -> {
+                for (int i = 0; i < 100; i++) {
+                    keys.add(keyPrefix + i);
+                }
             }
         }
         ResetRequest request = ResetRequest.newBuilder().addAllKeys(keys).build();
@@ -206,9 +213,10 @@ public class BenchmarkClient {
     private static IntSupplier keyIndexSupplier(KeyMode mode) {
         return switch (mode) {
             case SINGLE -> () -> 0;
-            case FOUR_BALANCED -> () -> ThreadLocalRandom.current().nextInt(4);
-            case FOUR_HOT -> () -> ThreadLocalRandom.current().nextDouble() < HOT_KEY_RATIO ? 0
-                    : 1 + ThreadLocalRandom.current().nextInt(3);
+            case HUNDRED_KEYS -> () -> ThreadLocalRandom.current().nextInt(100);
+            // 90% traffic to key 0, 10% distributed among keys 1-99
+            case HUNDRED_KEYS_HOT -> () -> ThreadLocalRandom.current().nextDouble() < HOT_KEY_RATIO ? 0
+                    : 1 + ThreadLocalRandom.current().nextInt(99);
         };
     }
 

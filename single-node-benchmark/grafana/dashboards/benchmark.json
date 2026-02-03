@@ -174,12 +174,8 @@
       },
       "targets": [
         {
-          "expr": "rate(container_cpu_usage_seconds_total{name=~\"ratelimit-app-.*\"}[1m]) * 100",
-          "legendFormat": "{{name}}"
-        },
-        {
-          "expr": "rate(container_cpu_usage_seconds_total{name=\"redis-benchmark\"}[1m]) * 100",
-          "legendFormat": "Redis"
+          "expr": "rate(container_cpu_usage_seconds_total{id=\"/docker\"}[1m]) * 100",
+          "legendFormat": "Total Docker CPU"
         }
       ],
       "gridPos": {
@@ -204,12 +200,8 @@
       },
       "targets": [
         {
-          "expr": "container_memory_usage_bytes{name=~\"ratelimit-app-.*\"}",
-          "legendFormat": "{{name}}"
-        },
-        {
-          "expr": "container_memory_usage_bytes{name=\"redis-benchmark\"}",
-          "legendFormat": "Redis"
+          "expr": "container_memory_usage_bytes{id=\"/docker\"}",
+          "legendFormat": "Total Docker Memory"
         }
       ],
       "gridPos": {

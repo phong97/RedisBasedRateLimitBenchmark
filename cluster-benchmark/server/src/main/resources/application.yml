@@ -1,0 +1,49 @@
+spring:
+  data:
+    redis:
+      host: ${SPRING_DATA_REDIS_HOST:redis-proxy}
+      port: ${SPRING_DATA_REDIS_PORT:6379}
+      # High throughput: larger pool to allow more concurrent connections.
+      lettuce:
+        pool:
+          max-active: 512
+          max-idle: 256
+          min-idle: 32
+          max-wait: 5s
+      # Benchmark-safe timeout.
+      timeout: 1s
+
+logging:
+  # Minimal logging for benchmark-focused runs.
+  level:
+    root: WARN
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: prometheus,health,metrics
+  endpoint:
+    prometheus:
+      enabled: true
+    metrics:
+      enabled: true
+  metrics:
+    export:
+      prometheus:
+        enabled: true
+    distribution:
+      percentiles-histogram:
+        http.server.requests: true
+    tags:
+      application: ratelimit-benchmark
+  # Enable detailed JVM metrics
+  prometheus:
+    metrics:
+      export:
+        enabled: true
+
+grpc:
+  server:
+    # gRPC server port for benchmarking clients.
+    port: 9090
