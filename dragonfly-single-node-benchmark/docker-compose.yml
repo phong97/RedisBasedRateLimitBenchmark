@@ -1,0 +1,88 @@
+services:
+  dragonfly:
+    image: docker.dragonflydb.io/dragonflydb/dragonfly
+    container_name: dragonfly-benchmark
+    ulimits:
+      memlock: -1
+    ports:
+      - "6379:6379"
+
+  dragonfly-exporter:
+    image: oliver006/redis_exporter:latest
+    container_name: dragonfly-exporter
+    environment:
+      - REDIS_ADDR=redis://dragonfly:6379
+    ports:
+      - "9121:9121"
+    depends_on:
+      - dragonfly
+
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: prometheus-benchmark
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    depends_on:
+      - dragonfly-exporter
+
+  grafana:
+    image: grafana/grafana:latest
+    container_name: grafana
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_USERS_ALLOW_SIGN_UP=false
+    volumes:
+      - ./grafana/provisioning:/etc/grafana/provisioning
+      - ./grafana/dashboards:/var/lib/grafana/dashboards
+    depends_on:
+      - prometheus
+
+  app-1:
+    build:
+      context: ./server
+    container_name: ratelimit-app-1
+    environment:
+      - SPRING_DATA_REDIS_HOST=dragonfly
+    depends_on:
+      - dragonfly
+
+  app-2:
+    build:
+      context: ./server
+    container_name: ratelimit-app-2
+    environment:
+      - SPRING_DATA_REDIS_HOST=dragonfly
+    depends_on:
+      - dragonfly
+
+  grpc-lb:
+    image: envoyproxy/envoy:v1.30-latest
+    container_name: grpc-lb
+    ports:
+      - "9091:9091"
+    volumes:
+      - ./envoy.yaml:/etc/envoy/envoy.yaml:ro
+    depends_on:
+      - app-1
+      - app-2
+
+  cadvisor:
+    image: gcr.io/cadvisor/cadvisor:v0.49.1
+    container_name: cadvisor
+    ports:
+      - "8080:8080"
+    volumes:
+      - /:/rootfs:ro
+      - /var/run:/var/run:ro
+      - /sys:/sys:ro
+      - /var/lib/docker/:/var/lib/docker:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - /dev/disk/:/dev/disk:ro
+    privileged: true
+    devices:
+      - /dev/kmsg

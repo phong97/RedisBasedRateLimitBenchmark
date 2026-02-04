@@ -1,0 +1,26 @@
+syntax = "proto3";
+
+option java_multiple_files = true;
+option java_package = "com.example.ratelimit.grpc";
+option java_outer_classname = "RateLimitProto";
+
+service RateLimitService {
+  rpc Limit (LimitRequest) returns (LimitResponse);
+  rpc Reset (ResetRequest) returns (ResetResponse);
+}
+
+message LimitRequest {
+  string key = 1;
+}
+
+message LimitResponse {
+  int64 count = 1;
+}
+
+message ResetRequest {
+  repeated string keys = 1;
+}
+
+message ResetResponse {
+  int64 deleted = 1;
+}
