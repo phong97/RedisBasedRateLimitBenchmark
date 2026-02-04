@@ -9,7 +9,7 @@
 ![Status](https://img.shields.io/badge/Status-Completed-success?style=for-the-badge)
 
 **Ngày thực hiện**: Tháng 1-2, 2026  
-**Tác giả**: Rate Limit Benchmark Team  
+**Tác giả**: PhongHV
 **Phiên bản**: 1.0
 
 </div>
@@ -69,24 +69,7 @@
 
 Dự án này nhằm **đánh giá toàn diện năng lực** của hai hệ thống in-memory store phổ biến — **Redis** và **Dragonfly** — khi được sử dụng làm backend cho hệ thống Rate Limiting trong môi trường microservices.
 
-```mermaid
-mindmap
-  root((Rate Limit Benchmark))
-    Redis
-      Single Node
-      Cluster Ready
-    Dragonfly
-      Multi-threaded
-      Redis Compatible
-    Scenarios
-      Single Key
-      Uniform Distribution
-      Hot Key 90/10
-    Metrics
-      Throughput RPS
-      Latency P99
-      Error Rate
-```
+![alt text](image-1.png)
 
 **Câu hỏi nghiên cứu chính**:
 
@@ -108,37 +91,6 @@ mindmap
 | **Metrics thu thập** | Throughput, Latency (Avg, P95, P99), Error Rate, Resource Usage |
 
 ### 1.3 Tại sao Rate Limiting quan trọng?
-
-```mermaid
-flowchart LR
-    subgraph Threats["🚨 Mối đe dọa"]
-        A[DDoS Attack]
-        B[API Abuse]
-        C[Viral Traffic]
-        D[Bot Scraping]
-    end
-    
-    subgraph RateLimit["🛡️ Rate Limiter"]
-        E[Check Counter]
-        F[Allow/Deny]
-    end
-    
-    subgraph Protected["✅ Hệ thống được bảo vệ"]
-        G[API Server]
-        H[Database]
-        I[Third-party APIs]
-    end
-    
-    A --> E
-    B --> E
-    C --> E
-    D --> E
-    E --> F
-    F -->|Allow| G
-    F -->|Deny| J[429 Too Many Requests]
-    G --> H
-    G --> I
-```
 
 Rate Limiting là tuyến phòng thủ đầu tiên bảo vệ hệ thống khỏi:
 
@@ -170,50 +122,7 @@ Rate Limiting là tuyến phòng thủ đầu tiên bảo vệ hệ thống kh�
 > ⚠️ **Lưu ý**: Tất cả thành phần (Backend, Proxy, App, Monitoring) đều chạy trên cùng một máy qua Docker Compose. Đây là môi trường "best-case" về network latency.
 
 ### 2.2 Kiến trúc tổng quan
-
-```mermaid
-flowchart TB
-    subgraph Client["📱 Benchmark Client"]
-        BC[Java gRPC Client<br/>Multi-threaded Load Generator]
-    end
-    
-    subgraph LoadBalancer["⚖️ Load Balancer"]
-        ENV[Envoy Proxy<br/>:9091]
-    end
-    
-    subgraph Application["🖥️ Application Layer"]
-        APP1[Spring Boot App 1<br/>gRPC :9090]
-        APP2[Spring Boot App 2<br/>gRPC :9090]
-    end
-    
-    subgraph Backend["💾 Backend Store"]
-        REDIS[(Redis/Dragonfly<br/>:6379)]
-    end
-    
-    subgraph Monitoring["📊 Monitoring Stack"]
-        PROM[Prometheus<br/>:9090]
-        GRAF[Grafana<br/>:3000]
-        EXP[Redis Exporter<br/>:9121]
-        CAD[cAdvisor<br/>:8080]
-    end
-    
-    BC -->|gRPC| ENV
-    ENV -->|Round Robin| APP1
-    ENV -->|Round Robin| APP2
-    APP1 -->|Lua Script| REDIS
-    APP2 -->|Lua Script| REDIS
-    
-    APP1 -.->|Metrics| PROM
-    APP2 -.->|Metrics| PROM
-    REDIS -.->|Metrics| EXP
-    EXP -.->|Scrape| PROM
-    CAD -.->|Container Stats| PROM
-    PROM -.->|Query| GRAF
-    
-    style REDIS fill:#ff6b6b,stroke:#c92a2a,color:#fff
-    style ENV fill:#4dabf7,stroke:#1971c2,color:#fff
-    style GRAF fill:#40c057,stroke:#2f9e44,color:#fff
-```
+![alt text](kien_truc_tong_quan.png)
 
 ### 2.3 Chi tiết Data Flow
 
@@ -265,42 +174,7 @@ flowchart TB
 | **📊 Monitoring** | Prometheus + Grafana | Thu thập & visualize metrics | 9090, 3000 |
 
 ### 2.5 Rate Limit Algorithm (Fixed Window Counter)
-
-```mermaid
-sequenceDiagram
-    autonumber
-    participant Client
-    participant App as Spring Boot App
-    participant Redis as Redis/Dragonfly
-    
-    Client->>App: CheckRateLimit(key, limit)
-    App->>Redis: EVAL Lua Script
-    
-    Note over Redis: Lua Script Execution
-    rect rgb(255, 240, 240)
-        Redis->>Redis: INCR key
-        alt count == 1 (new key)
-            Redis->>Redis: EXPIRE key TTL
-        end
-        Redis-->>App: return count
-    end
-    
-    alt count <= limit
-        App-->>Client: ✅ ALLOW (remaining = limit - count)
-    else count > limit
-        App-->>Client: ❌ DENY (retry after TTL)
-    end
-```
-
-**Lua Script được sử dụng:**
-```lua
--- Atomic Rate Limit Check
-local count = redis.call('INCR', KEYS[1])
-if count == 1 then
-    redis.call('EXPIRE', KEYS[1], ARGV[1])
-end
-return count
-```
+![alt text](data_flow.png)
 
 ---
 
@@ -310,27 +184,7 @@ return count
 
 Chúng tôi thiết kế **3 kịch bản** mô phỏng các pattern traffic thực tế:
 
-```mermaid
-flowchart LR
-    subgraph S1["🎯 Scenario 1: Single Key"]
-        A1[100% Traffic] --> K1[Key A]
-    end
-    
-    subgraph S2["📊 Scenario 2: Uniform"]
-        A2[Traffic] --> K2[Key 1]
-        A2 --> K3[Key 2]
-        A2 --> K4[...]
-        A2 --> K5[Key 100]
-    end
-    
-    subgraph S3["🔥 Scenario 3: Hot Key"]
-        A3[90% Traffic] --> K6[Hot Key]
-        A3B[10% Traffic] --> K7[99 Other Keys]
-    end
-    
-    style K1 fill:#ff6b6b,stroke:#c92a2a,color:#fff
-    style K6 fill:#ff6b6b,stroke:#c92a2a,color:#fff
-```
+![alt text](image.png)
 
 #### Kịch bản 1: Single Key (Best Case)
 | Đặc điểm | Mô tả |
@@ -358,18 +212,7 @@ flowchart LR
 
 ### 3.2 Quy trình benchmark
 
-```mermaid
-flowchart LR
-    subgraph Step["📝 Mỗi RPS Level"]
-        W[🔥 Warmup<br/>5 sec] --> M[📊 Measure<br/>30-60 sec] --> C[❄️ Cooldown<br/>10 sec]
-    end
-    
-    subgraph Levels["📈 RPS Progression"]
-        L1[10k] --> L2[12.5k] --> L3[15k] --> L4[17.5k] --> L5[20k] --> L6[22.5k] --> L7[25k] --> L8[27.5k] --> L9[30k]
-    end
-    
-    Levels --> Step
-```
+![alt text](image-2.png)
 
 ```
 ╔════════════════════════════════════════════════════════════════════════════╗
@@ -835,14 +678,7 @@ Failure %│
 
 ### 6.1 📊 Throughput Comparison
 
-```mermaid
-xychart-beta
-    title "Maximum Throughput Comparison (RPS)"
-    x-axis ["100 Keys Uniform", "100 Keys Hot Key"]
-    y-axis "RPS (thousands)" 0 --> 30
-    bar [20, 17.5]
-    bar [27.5, 22.5]
-```
+![alt text](image-11.png)
 
 | Kịch bản | Redis Safe | Dragonfly Safe | 📈 Improvement | Redis Max | Dragonfly Max | 📈 Improvement |
 |:--------:|:----------:|:--------------:|:--------------:|:---------:|:-------------:|:--------------:|
@@ -894,24 +730,7 @@ xychart-beta
 
 ### 6.3 🛡️ Failure Pattern Comparison
 
-```mermaid
-graph LR
-    subgraph Redis["🔴 Redis Failure Pattern"]
-        R1[0% @ 17.5k] -->|"Instant Jump"| R2[74% @ 20k]
-        R2 -->|"Dead"| R3[91% @ 22.5k]
-    end
-    
-    subgraph Dragonfly["🟢 Dragonfly Failure Pattern"]
-        D1[0% @ 22.5k] -->|"Gradual"| D2[2.6% @ 25k]
-        D2 -->|"Gradual"| D3[8.7% @ 27.5k]
-        D3 -->|"Finally"| D4[60% @ 30k]
-    end
-    
-    style R2 fill:#ff6b6b,stroke:#c92a2a,color:#fff
-    style R3 fill:#ff6b6b,stroke:#c92a2a,color:#fff
-    style D1 fill:#40c057,stroke:#2f9e44,color:#fff
-    style D2 fill:#fab005,stroke:#f59f00,color:#fff
-```
+![alt text](image-3.png)
 
 ```
                     FAILURE RATE vs RPS (Hot Key Scenario)
@@ -993,32 +812,7 @@ Failure %│
 
 #### 🏗️ Kiến trúc Single-threaded vs Multi-threaded
 
-```mermaid
-flowchart TB
-    subgraph Redis["🔴 REDIS ARCHITECTURE"]
-        direction TB
-        RC1[Client 1] --> REL[Single Event Loop<br/>🔒 1 CPU Core]
-        RC2[Client 2] --> REL
-        RC3[Client 3] --> REL
-        REL --> RDS[(Single Data Store)]
-        
-        RB[⚠️ BOTTLENECK<br/>All operations serialize<br/>through 1 thread]
-    end
-    
-    subgraph Dragonfly["🟢 DRAGONFLY ARCHITECTURE"]
-        direction TB
-        DC1[Client 1] --> DT1[Thread 1] --> DS1[(Shard 1)]
-        DC2[Client 2] --> DT2[Thread 2] --> DS2[(Shard 2)]
-        DC3[Client 3] --> DT3[Thread 3] --> DS3[(Shard 3)]
-        DC4[Client 4] --> DT4[Thread 4] --> DS4[(Shard 4)]
-        
-        DB[✅ PARALLEL<br/>Shared-Nothing Architecture<br/>Uses all CPU cores]
-    end
-    
-    style REL fill:#ff6b6b,stroke:#c92a2a,color:#fff
-    style RB fill:#ff6b6b,stroke:#c92a2a,color:#fff
-    style DB fill:#40c057,stroke:#2f9e44,color:#fff
-```
+![alt text](image-4.png)
 
 ```
 ╔═══════════════════════════════════════════════════════════════════════════════╗
@@ -1108,30 +902,7 @@ Dù Dragonfly nhanh hơn, **Hot Key vẫn là bottleneck** vì quy luật vật 
 
 #### 🔍 Redis Single Key Test - Tại sao 15k, 20k, 22.5k RPS có failure tạm thời?
 
-```mermaid
-timeline
-    title Redis Single Key - Anomaly Timeline
-    section 10k-12.5k RPS
-        Stable : JVM cold
-        : No failures
-    section 15k RPS
-        ⚠️ Anomaly : JIT compilation
-        : GC pause
-        : 2.9% failures
-    section 17.5k RPS  
-        Recovery : JIT optimized
-        : 0% failures
-    section 20k-22.5k RPS
-        ⚠️ Anomaly : Connection pool resize
-        : TCP buffer flush
-        : 4-6% failures
-    section 25k-27.5k RPS
-        Stable Peak : Steady state
-        : 0% failures
-    section 30k RPS
-        💀 Collapse : System overload
-        : 49% failures
-```
+![alt text](image-5.png)
 
 **Nguyên nhân có thể**:
 
@@ -1144,20 +915,7 @@ timeline
 
 ### 7.4 📚 Bài học từ Failure Patterns
 
-```mermaid
-quadrantChart
-    title Failure Pattern Analysis
-    x-axis Low Throughput --> High Throughput
-    y-axis Gradual Failure --> Sudden Failure
-    quadrant-1 Dangerous Zone
-    quadrant-2 Warning Zone  
-    quadrant-3 Safe Zone
-    quadrant-4 Optimal Zone
-    Redis Hot Key: [0.58, 0.9]
-    Redis Uniform: [0.67, 0.7]
-    Dragonfly Hot Key: [0.75, 0.4]
-    Dragonfly Uniform: [0.92, 0.3]
-```
+![alt text](image-6.png)
 
 | Pattern | 🔴 Redis Behavior | 🟢 Dragonfly Behavior | Implication |
 |---------|-------------------|----------------------|-------------|
@@ -1171,24 +929,7 @@ quadrantChart
 
 ### 8.1 📊 Capacity Planning Matrix
 
-```mermaid
-flowchart TD
-    START[📊 Traffic Estimate?] --> Q1{< 10k RPS?}
-    Q1 -->|Yes| A1[✅ Redis đủ dùng<br/>Simple & Proven]
-    Q1 -->|No| Q2{10k - 15k RPS?}
-    Q2 -->|Yes| A2[✅ Redis OK<br/>Monitor closely]
-    Q2 -->|No| Q3{15k - 20k RPS?}
-    Q3 -->|Yes| A3[⚠️ Consider Dragonfly<br/>or Redis Cluster]
-    Q3 -->|No| Q4{20k - 25k RPS?}
-    Q4 -->|Yes| A4[🟢 Dragonfly recommended<br/>Redis needs Cluster]
-    Q4 -->|No| A5[🔴 Must use Cluster<br/>or Multi-layer caching]
-    
-    style A1 fill:#40c057,stroke:#2f9e44,color:#fff
-    style A2 fill:#40c057,stroke:#2f9e44,color:#fff
-    style A3 fill:#fab005,stroke:#f59f00,color:#000
-    style A4 fill:#4dabf7,stroke:#1971c2,color:#fff
-    style A5 fill:#ff6b6b,stroke:#c92a2a,color:#fff
-```
+![alt text](image-7.png)
 
 | Use Case | 🔴 Redis Single Node | 🟢 Dragonfly Single Node | 👉 Recommendation |
 |:--------:|:--------------------:|:------------------------:|:-----------------:|
@@ -1293,28 +1034,7 @@ flowchart TD
 
 ### 8.3 🔥 Hot Key Mitigation Strategies
 
-```mermaid
-flowchart LR
-    subgraph Strategies["🛡️ Hot Key Mitigation"]
-        direction TB
-        S1[🔵 Local Token Bucket]
-        S2[🟢 Key Sharding]
-        S3[🟡 Write-Behind]
-        S4[🔴 Probabilistic]
-    end
-    
-    subgraph Tradeoffs["⚖️ Trade-offs"]
-        T1[95-99% Accuracy<br/>50-100% Gain]
-        T2[100% Accuracy<br/>Linear Gain]
-        T3[90-95% Accuracy<br/>200-500% Gain]
-        T4[~P×100% Accuracy<br/>1/P Gain]
-    end
-    
-    S1 --> T1
-    S2 --> T2
-    S3 --> T3
-    S4 --> T4
-```
+![alt text](image-8.png)
 
 | Strategy | Description | Accuracy | Throughput Gain | Complexity |
 |:--------:|-------------|:--------:|:---------------:|:----------:|
@@ -1383,26 +1103,7 @@ flowchart LR
 
 ### 9.1 🔑 Key Findings
 
-```mermaid
-mindmap
-  root((Key Findings))
-    Throughput
-      Dragonfly +37% Uniform
-      Dragonfly +29% Hot Key
-      Single Node up to 27.5k RPS
-    Latency
-      Dragonfly 2-7x faster
-      P99 < 100ms at high load
-      Stable under pressure
-    Resilience
-      Dragonfly graceful degradation
-      Redis sudden collapse
-      More reaction time
-    Hot Key
-      Both limited by physics
-      Multi-layer required
-      Cannot scale infinitely
-```
+![alt text](image-9.png)
 
 <div align="center">
 
@@ -1442,12 +1143,7 @@ mindmap
 
 ### 9.3 🏆 Final Verdict
 
-```mermaid
-pie title Overall Score Comparison
-    "Dragonfly Wins" : 5
-    "Tie" : 2
-    "Redis Wins" : 2
-```
+![alt text](image-10.png)
 
 | Criteria | Winner | Score/Detail |
 |:--------:|:------:|--------------|
