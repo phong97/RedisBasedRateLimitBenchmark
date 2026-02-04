@@ -1250,10 +1250,10 @@ open http://localhost:3000
 
 ---
 
-**© 2026 Rate Limit Benchmark Team**  
+**© 2026 PhongHV**  
 *Document generated: February 5, 2026*
 
 ![Made with Love](https://img.shields.io/badge/Made%20with-❤️-red?style=for-the-badge)
-![Powered by PhongHV](https://img.shields.io/badge/Powered%20by-Data-blue?style=for-the-badge)
+![Powered by DATA](https://img.shields.io/badge/Powered%20by-Data-blue?style=for-the-badge)
 
 </div>
